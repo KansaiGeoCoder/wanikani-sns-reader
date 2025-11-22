@@ -658,6 +658,7 @@
             const [loading, setLoading] = useState(false);
             const [selectedWord, setSelectedWord] = useState(null);
             const [showSettings, setShowSettings] = useState(false);
+            const [cachedContent, setCachedContent] = useState([]); // Cache fetched content
 
             useEffect(() => {
                 // Initialize Lucide icons after component mounts/updates
@@ -801,7 +802,7 @@
                             return true;
                         };
                         
-                        for (const article of articles.slice(0, 20)) {
+                        for (const article of articles.slice(0, 30)) {
                             try {
                                 const articleResponse = await fetch(`https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`);
                                 const html = await articleResponse.text();
@@ -946,6 +947,9 @@
                     
                     console.log('After validation:', validatedContent.length, 'sentences');
 
+                    // Cache the validated content for future refreshes
+                    setCachedContent(validatedContent);
+
                     // Match sentences with vocabulary
                     const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
                     console.log('Matching against', filteredVocab.length, 'vocabulary items');
@@ -959,7 +963,9 @@
                         console.log('Warning: Only found', matchedPosts.length, 'good matches. You may want to refresh for more content.');
                     }
                     
-                    setPosts(matchedPosts.slice(0, 15)); // Show top 15 matches
+                    // Shuffle the matched posts to show different content on each refresh
+                    const shuffled = [...matchedPosts].sort(() => Math.random() - 0.5);
+                    setPosts(shuffled.slice(0, 15)); // Show 15 random matches from the pool
                 } catch (error) {
                     console.error('Error fetching content:', error);
                     alert('Error fetching Japanese content. Please try again. Check the browser console for details.');
@@ -968,61 +974,75 @@
                 }
             };
 
-            // Match sentences with user's vocabulary - improved algorithm
+            // Match sentences with user's vocabulary - improved algorithm with better compound word handling
             const matchSentencesWithVocab = (contentArray, vocabList) => {
-                const vocabSet = new Set(vocabList.map(v => v.characters));
-                
                 // Score each sentence based on vocabulary matches
                 const scoredContent = contentArray.map(content => {
                     const matches = [];
-                    let totalKnownChars = 0;
-                    
-                    // Find all vocabulary matches in the sentence
                     const matchedPositions = new Set();
                     
-                    // Sort vocabulary by length (longest first) to match longer words first
-                    const sortedVocab = [...vocabList].sort((a, b) => 
-                        b.characters.length - a.characters.length
-                    );
-                    
-                    sortedVocab.forEach(vocab => {
+                    // Create a list of all possible matches with their positions
+                    const possibleMatches = [];
+                    vocabList.forEach(vocab => {
                         let searchPos = 0;
                         while (true) {
                             const index = content.text.indexOf(vocab.characters, searchPos);
                             if (index === -1) break;
                             
-                            // Check if this position hasn't been matched by a longer word
-                            let alreadyMatched = false;
-                            for (let i = index; i < index + vocab.characters.length; i++) {
-                                if (matchedPositions.has(i)) {
-                                    alreadyMatched = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (!alreadyMatched) {
-                                matches.push({...vocab, position: index});
-                                totalKnownChars += vocab.characters.length;
-                                
-                                // Mark these positions as matched
-                                for (let i = index; i < index + vocab.characters.length; i++) {
-                                    matchedPositions.add(i);
-                                }
-                            }
+                            possibleMatches.push({
+                                vocab: vocab,
+                                position: index,
+                                length: vocab.characters.length
+                            });
                             
                             searchPos = index + 1;
                         }
                     });
                     
-                    // Count Japanese characters in the sentence (hiragana, katakana, kanji)
+                    // Sort by position first, then by length (longest first) for same position
+                    possibleMatches.sort((a, b) => {
+                        if (a.position !== b.position) {
+                            return a.position - b.position;
+                        }
+                        return b.length - a.length; // Longer words first at same position
+                    });
+                    
+                    // Select non-overlapping matches, preferring longer words
+                    possibleMatches.forEach(match => {
+                        // Check if any position in this match is already taken
+                        let hasOverlap = false;
+                        for (let i = match.position; i < match.position + match.length; i++) {
+                            if (matchedPositions.has(i)) {
+                                hasOverlap = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!hasOverlap) {
+                            // Mark all positions as used
+                            for (let i = match.position; i < match.position + match.length; i++) {
+                                matchedPositions.add(i);
+                            }
+                            
+                            matches.push({
+                                ...match.vocab,
+                                position: match.position
+                            });
+                        }
+                    });
+                    
+                    // Calculate total matched character count
+                    const totalKnownChars = matches.reduce((sum, m) => sum + m.characters.length, 0);
+                    
+                    // Count Japanese characters in the sentence
                     const japaneseChars = (content.text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length;
                     
                     // Calculate percentage of known content
                     const knownPercentage = japaneseChars > 0 ? (totalKnownChars / japaneseChars) * 100 : 0;
                     
-                    // Calculate score - heavily favor sentences with high known percentage
+                    // Calculate score
                     const matchCount = matches.length;
-                    const lengthPenalty = Math.max(0, 100 - content.text.length) / 100; // Prefer shorter sentences
+                    const lengthPenalty = Math.max(0, 100 - content.text.length) / 100;
                     const score = (knownPercentage * 10) + (matchCount * 5) + lengthPenalty;
                     
                     return {
@@ -1061,6 +1081,27 @@
 
             const refreshPosts = () => {
                 if (vocabulary.length > 0) {
+                    // If we have cached content, use it for instant refresh
+                    if (cachedContent.length > 0) {
+                        console.log('Using cached content for refresh');
+                        const filteredVocab = vocabulary.filter(v => v.level <= selectedLevel);
+                        const matchedPosts = matchSentencesWithVocab(cachedContent, filteredVocab);
+                        
+                        // Shuffle to show different sentences
+                        const shuffled = [...matchedPosts].sort(() => Math.random() - 0.5);
+                        setPosts(shuffled.slice(0, 15));
+                    } else {
+                        // No cache, fetch fresh content
+                        fetchRealContent(vocabulary, selectedLevel);
+                    }
+                }
+            };
+            
+            const forceRefreshContent = () => {
+                // Clear cache and fetch fresh content
+                if (vocabulary.length > 0) {
+                    console.log('Force refreshing content...');
+                    setCachedContent([]);
                     fetchRealContent(vocabulary, selectedLevel);
                 }
             };
@@ -1205,9 +1246,13 @@
                                     </select>
                                 </div>
 
-                                <button className="refresh-btn" onClick={refreshPosts}>
+                                <button 
+                                    className="refresh-btn" 
+                                    onClick={refreshPosts}
+                                    title="Show different sentences from the current content pool"
+                                >
                                     <Sparkles />
-                                    New Posts
+                                    Shuffle
                                 </button>
                                 <button className="settings-btn" onClick={() => setShowSettings(true)}>
                                     <Settings />
