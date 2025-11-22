@@ -208,8 +208,59 @@
             background: white;
             padding: 1rem 1.5rem;
             border-radius: 16px;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .translation-controls {
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
             margin-bottom: 2rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .translation-controls-title {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        .translation-controls-buttons {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .translation-control-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: all 0.2s ease;
+            color: #4a5568;
+        }
+
+        .translation-control-btn:hover:not(:disabled) {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            transform: translateY(-1px);
+        }
+
+        .translation-control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .legend-title {
@@ -394,6 +445,45 @@
             color: #2d3748;
             margin-bottom: 1rem;
             font-weight: 400;
+        }
+
+        .translation-section {
+            margin-bottom: 1rem;
+        }
+
+        .translation-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: all 0.2s ease;
+            color: #4a5568;
+        }
+
+        .translation-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            transform: translateY(-1px);
+        }
+
+        .translation-text {
+            margin-top: 0.75rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #2d3748;
+            font-style: italic;
+            animation: fadeIn 0.3s ease-out;
         }
 
         .knowledge-bar {
@@ -638,6 +728,20 @@
                 grid-template-columns: 1fr;
             }
 
+            .translation-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .translation-controls-buttons {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .translation-control-btn {
+                width: 100%;
+            }
+
             .post-content {
                 font-size: 1rem;
             }
@@ -679,6 +783,9 @@
             const [selectedWord, setSelectedWord] = useState(null);
             const [showSettings, setShowSettings] = useState(false);
             const [cachedContent, setCachedContent] = useState([]); // Cache fetched content
+            const [translations, setTranslations] = useState({}); // Cache translations by sentence
+            const [showTranslations, setShowTranslations] = useState({}); // Track which translations are visible
+            const [translatingAll, setTranslatingAll] = useState(false); // For batch translation
 
             useEffect(() => {
                 // Initialize Lucide icons after component mounts/updates
@@ -1217,6 +1324,98 @@
                 }
             };
 
+            // Translate Japanese sentence to English using Claude API
+            const translateSentence = async (japaneseText, postIndex) => {
+                // Check if already translated
+                if (translations[japaneseText]) {
+                    setShowTranslations(prev => ({ ...prev, [postIndex]: !prev[postIndex] }));
+                    return;
+                }
+
+                try {
+                    const response = await fetch("https://api.anthropic.com/v1/messages", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            model: "claude-sonnet-4-20250514",
+                            max_tokens: 500,
+                            messages: [
+                                {
+                                    role: "user",
+                                    content: `Translate this Japanese sentence to natural English. Only provide the translation, nothing else:\n\n${japaneseText}`
+                                }
+                            ]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const translation = data.content[0].text.trim();
+
+                    // Cache the translation
+                    setTranslations(prev => ({ ...prev, [japaneseText]: translation }));
+                    setShowTranslations(prev => ({ ...prev, [postIndex]: true }));
+                } catch (error) {
+                    console.error('Translation error:', error);
+                    alert('Failed to translate. Please try again.');
+                }
+            };
+
+            // Translate all visible posts
+            const translateAllPosts = async () => {
+                if (translatingAll) return;
+                
+                setTranslatingAll(true);
+                
+                try {
+                    for (let i = 0; i < posts.length; i++) {
+                        const post = posts[i];
+                        
+                        // Skip if already translated
+                        if (translations[post.finalContent]) {
+                            setShowTranslations(prev => ({ ...prev, [i]: true }));
+                            continue;
+                        }
+
+                        // Translate this post
+                        const response = await fetch("https://api.anthropic.com/v1/messages", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                model: "claude-sonnet-4-20250514",
+                                max_tokens: 500,
+                                messages: [
+                                    {
+                                        role: "user",
+                                        content: `Translate this Japanese sentence to natural English. Only provide the translation, nothing else:\n\n${post.finalContent}`
+                                    }
+                                ]
+                            })
+                        });
+
+                        const data = await response.json();
+                        const translation = data.content[0].text.trim();
+
+                        // Cache the translation
+                        setTranslations(prev => ({ ...prev, [post.finalContent]: translation }));
+                        setShowTranslations(prev => ({ ...prev, [i]: true }));
+                    }
+                } catch (error) {
+                    console.error('Batch translation error:', error);
+                    alert('Error during batch translation. Some translations may be missing.');
+                } finally {
+                    setTranslatingAll(false);
+                }
+            };
+
+            // Hide all translations
+            const hideAllTranslations = () => {
+                setShowTranslations({});
+            };
+
             const handleLevelChange = (newLevel) => {
                 setSelectedLevel(newLevel);
                 fetchRealContent(vocabulary, newLevel);
@@ -1410,6 +1609,26 @@
                                 </div>
                             </div>
 
+                            <div className="translation-controls">
+                                <div className="translation-controls-title">Translations:</div>
+                                <div className="translation-controls-buttons">
+                                    <button 
+                                        className="translation-control-btn"
+                                        onClick={translateAllPosts}
+                                        disabled={translatingAll || posts.length === 0}
+                                    >
+                                        {translatingAll ? '⏳ Translating...' : '🌐 Translate All'}
+                                    </button>
+                                    <button 
+                                        className="translation-control-btn"
+                                        onClick={hideAllTranslations}
+                                        disabled={Object.keys(showTranslations).length === 0}
+                                    >
+                                        👁️ Hide All
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="posts-grid">
                                 {loading ? (
                                     <div className="loading">Loading Japanese content...</div>
@@ -1428,6 +1647,22 @@
                                             </div>
                                             <div className="post-content">
                                                 {highlightVocabulary(post.finalContent, post.vocabulary)}
+                                            </div>
+                                            <div className="translation-section">
+                                                <button 
+                                                    className="translation-btn"
+                                                    onClick={() => translateSentence(post.finalContent, idx)}
+                                                >
+                                                    {translations[post.finalContent] ? 
+                                                        (showTranslations[idx] ? '🇯🇵 Hide Translation' : '🇬🇧 Show Translation') : 
+                                                        '🇬🇧 Translate'
+                                                    }
+                                                </button>
+                                                {showTranslations[idx] && translations[post.finalContent] && (
+                                                    <div className="translation-text">
+                                                        {translations[post.finalContent]}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="knowledge-bar">
                                                 <div className="knowledge-bar-fill" style={{ width: `${post.retweets}%` }}>
