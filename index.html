@@ -398,6 +398,8 @@
         .post-stats {
             display: flex;
             gap: 2rem;
+            align-items: center;
+            justify-content: space-between;
             padding-top: 1rem;
             border-top: 1px solid #e2e8f0;
             color: #718096;
@@ -408,6 +410,19 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
+
+        .source-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: color 0.2s ease;
+        }
+
+        .source-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
         }
 
         .modal-overlay {
@@ -702,7 +717,7 @@
                     setAssignments(assignmentsMap);
                     setIsConfigured(true);
                     
-                    generateSamplePosts(vocabList, level);
+                    fetchRealContent(vocabList, level);
                 } catch (error) {
                     alert('Error fetching WaniKani data. Please check your API key.');
                     console.error(error);
@@ -711,75 +726,162 @@
                 }
             };
 
-            const generateSamplePosts = (vocabList, targetLevel) => {
-                // Filter vocabulary up to the selected level
-                const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
-                
-                if (filteredVocab.length === 0) return;
+            // Fetch real Japanese content from various sources
+            const fetchRealContent = async (vocabList, targetLevel) => {
+                setLoading(true);
+                const allContent = [];
 
-                const samplePosts = [
-                    {
-                        username: '田中さくら',
-                        handle: '@sakura_tanaka',
-                        avatar: '🌸',
-                        timestamp: '2時間前',
-                        content: `今日は{0}で{1}を{2}ました。とても{3}でした！`,
-                        vocabIndices: [0, 1, 2, 3]
-                    },
-                    {
-                        username: '山田健太',
-                        handle: '@kenta_y',
-                        avatar: '⛰️',
-                        timestamp: '5時間前',
-                        content: `{0}に{1}があります。{2}は{3}だと思います。`,
-                        vocabIndices: [4, 5, 6, 7]
-                    },
-                    {
-                        username: '鈴木美咲',
-                        handle: '@misaki_s',
-                        avatar: '🎨',
-                        timestamp: '1日前',
-                        content: `この{0}は本当に{1}ですね。{2}したいです。`,
-                        vocabIndices: [8, 9, 10]
-                    },
-                    {
-                        username: '佐藤太郎',
-                        handle: '@taro_sato',
-                        avatar: '📚',
-                        timestamp: '3日前',
-                        content: `{0}を{1}しています。毎日{2}を{3}ています。`,
-                        vocabIndices: [11, 12, 13, 14]
-                    },
-                    {
-                        username: 'ひなこ',
-                        handle: '@hinako_chan',
-                        avatar: '🌺',
-                        timestamp: '1週間前',
-                        content: `友達と{0}に行きました。{1}を{2}て、{3}しました。`,
-                        vocabIndices: [15, 16, 17, 18]
+                try {
+                    // Fetch from NHK News Easy (using CORS proxy)
+                    try {
+                        // Using corsproxy.io to bypass CORS restrictions
+                        const nhkResponse = await fetch('https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/news-list.json');
+                        const nhkData = await nhkResponse.json();
+                        
+                        const articles = nhkData[0]?.list || [];
+                        for (const article of articles.slice(0, 10)) {
+                            try {
+                                const articleResponse = await fetch(`https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`);
+                                const html = await articleResponse.text();
+                                
+                                // Extract sentences from HTML
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(html, 'text/html');
+                                const paragraphs = doc.querySelectorAll('p');
+                                
+                                paragraphs.forEach(p => {
+                                    const text = p.textContent.trim();
+                                    if (text.length > 10) {
+                                        // Split into sentences
+                                        const sentences = text.split(/[。！？]/);
+                                        sentences.forEach(sentence => {
+                                            if (sentence.trim().length > 10) {
+                                                allContent.push({
+                                                    text: sentence.trim() + '。',
+                                                    source: 'NHK News Easy',
+                                                    sourceIcon: '📰',
+                                                    title: article.title,
+                                                    url: `https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            } catch (e) {
+                                console.log('Error fetching NHK article:', e);
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Error fetching NHK news:', e);
                     }
-                ];
 
-                const generatedPosts = samplePosts.map(template => {
-                    let content = template.content;
-                    const usedWords = [];
+                    // Fetch from Reddit (Japanese subreddits)
+                    try {
+                        const subreddits = ['newsokur', 'japan', 'LearnJapanese'];
+                        for (const subreddit of subreddits) {
+                            const redditResponse = await fetch(`https://www.reddit.com/r/${subreddit}.json?limit=25`);
+                            const redditData = await redditResponse.json();
+                            
+                            redditData.data.children.forEach(post => {
+                                const title = post.data.title;
+                                const selftext = post.data.selftext;
+                                
+                                // Check if content contains Japanese characters
+                                if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(title)) {
+                                    allContent.push({
+                                        text: title,
+                                        source: `r/${subreddit}`,
+                                        sourceIcon: '💬',
+                                        title: post.data.author,
+                                        url: `https://www.reddit.com${post.data.permalink}`
+                                    });
+                                }
+                                
+                                if (selftext && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(selftext)) {
+                                    const sentences = selftext.split(/[。！？\n]/);
+                                    sentences.forEach(sentence => {
+                                        if (sentence.trim().length > 10) {
+                                            allContent.push({
+                                                text: sentence.trim() + '。',
+                                                source: `r/${subreddit}`,
+                                                sourceIcon: '💬',
+                                                title: post.data.author,
+                                                url: `https://www.reddit.com${post.data.permalink}`
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.log('Error fetching Reddit:', e);
+                    }
 
-                    template.vocabIndices.forEach((_, idx) => {
-                        const randomVocab = filteredVocab[Math.floor(Math.random() * filteredVocab.length)];
-                        usedWords.push(randomVocab);
-                        content = content.replace(`{${idx}}`, randomVocab.characters);
+                    if (allContent.length === 0) {
+                        console.log('No content fetched. This might be due to CORS restrictions.');
+                        alert('Unable to fetch Japanese content. This may be due to browser security restrictions (CORS). The app works best when hosted on a web server with a CORS proxy, or you can install a CORS browser extension.');
+                    }
+
+                    // Match sentences with vocabulary
+                    const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
+                    const matchedPosts = matchSentencesWithVocab(allContent, filteredVocab);
+                    
+                    if (matchedPosts.length === 0 && allContent.length > 0) {
+                        alert('Content was fetched but no sentences matched your vocabulary. Try a different level or refresh.');
+                    }
+                    
+                    setPosts(matchedPosts.slice(0, 10)); // Show top 10 matches
+                } catch (error) {
+                    console.error('Error fetching content:', error);
+                    alert('Error fetching Japanese content. Please try again. Note: This feature requires internet access and may be blocked by CORS policies.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Match sentences with user's vocabulary
+            const matchSentencesWithVocab = (contentArray, vocabList) => {
+                const vocabSet = new Set(vocabList.map(v => v.characters));
+                
+                // Score each sentence based on vocabulary matches
+                const scoredContent = contentArray.map(content => {
+                    const matches = [];
+                    let matchCount = 0;
+                    
+                    // Find all vocabulary matches in the sentence
+                    vocabList.forEach(vocab => {
+                        if (content.text.includes(vocab.characters)) {
+                            matches.push(vocab);
+                            matchCount++;
+                        }
                     });
-
+                    
+                    // Calculate score (prefer more matches and appropriate difficulty)
+                    const score = matchCount * 10 + (matches.length > 0 ? 1 / content.text.length : 0);
+                    
                     return {
-                        ...template,
-                        finalContent: content,
-                        vocabulary: usedWords,
-                        likes: Math.floor(Math.random() * 500),
-                        retweets: Math.floor(Math.random() * 100)
+                        ...content,
+                        vocabulary: matches,
+                        matchCount,
+                        score
                     };
                 });
-
-                setPosts(generatedPosts);
+                
+                // Filter to only sentences with at least one match and sort by score
+                return scoredContent
+                    .filter(c => c.matchCount > 0)
+                    .sort((a, b) => b.score - a.score)
+                    .map(content => ({
+                        username: content.source,
+                        handle: content.title,
+                        avatar: content.sourceIcon,
+                        timestamp: 'Recent',
+                        finalContent: content.text,
+                        vocabulary: content.vocabulary,
+                        likes: content.matchCount,
+                        retweets: Math.floor(content.score),
+                        sourceUrl: content.url
+                    }));
             };
 
             const handleConfigSubmit = (e) => {
@@ -791,13 +893,13 @@
 
             const refreshPosts = () => {
                 if (vocabulary.length > 0) {
-                    generateSamplePosts(vocabulary, selectedLevel);
+                    fetchRealContent(vocabulary, selectedLevel);
                 }
             };
 
             const handleLevelChange = (newLevel) => {
                 setSelectedLevel(newLevel);
-                generateSamplePosts(vocabulary, newLevel);
+                fetchRealContent(vocabulary, newLevel);
             };
 
             const getStageColor = (stage) => {
@@ -971,31 +1073,43 @@
                             </div>
 
                             <div className="posts-grid">
-                                {posts.map((post, idx) => (
-                                    <div key={idx} className="post-card">
-                                        <div className="post-header">
-                                            <div className="avatar">{post.avatar}</div>
-                                            <div className="user-info">
-                                                <div className="username">{post.username}</div>
-                                                <div className="handle">{post.handle}</div>
+                                {loading ? (
+                                    <div className="loading">Loading Japanese content...</div>
+                                ) : posts.length === 0 ? (
+                                    <div className="loading">No content found. Try refreshing or selecting a different level.</div>
+                                ) : (
+                                    posts.map((post, idx) => (
+                                        <div key={idx} className="post-card">
+                                            <div className="post-header">
+                                                <div className="avatar">{post.avatar}</div>
+                                                <div className="user-info">
+                                                    <div className="username">{post.username}</div>
+                                                    <div className="handle">{post.handle}</div>
+                                                </div>
+                                                <div className="timestamp">{post.timestamp}</div>
                                             </div>
-                                            <div className="timestamp">{post.timestamp}</div>
-                                        </div>
-                                        <div className="post-content">
-                                            {highlightVocabulary(post.finalContent, post.vocabulary)}
-                                        </div>
-                                        <div className="post-stats">
-                                            <div className="stat">
-                                                <span>❤️</span>
-                                                <span>{post.likes}</span>
+                                            <div className="post-content">
+                                                {highlightVocabulary(post.finalContent, post.vocabulary)}
                                             </div>
-                                            <div className="stat">
-                                                <span>🔄</span>
-                                                <span>{post.retweets}</span>
+                                            <div className="post-stats">
+                                                <div className="stat" title="Vocabulary matches">
+                                                    <span>📚</span>
+                                                    <span>{post.likes} words</span>
+                                                </div>
+                                                {post.sourceUrl && (
+                                                    <a 
+                                                        href={post.sourceUrl} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="source-link"
+                                                    >
+                                                        View Source →
+                                                    </a>
+                                                )}
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     )}
