@@ -167,8 +167,115 @@
             background: white;
             padding: 1.5rem;
             border-radius: 16px;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .level-selector {
+            display: flex;
+            align-items: center;
+        }
+
+        .level-select {
+            padding: 0.5rem 2rem 0.5rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            background: white;
+            transition: all 0.2s ease;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234a5568' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+        }
+
+        .level-select:hover {
+            border-color: #cbd5e0;
+        }
+
+        .level-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .legend-bar {
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
             margin-bottom: 2rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .legend-title {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .vocab-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .vocab-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .vocab-meta-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .vocab-meta-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .vocab-meta-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
         }
 
         .level-badge {
@@ -448,6 +555,28 @@
                 align-items: stretch;
             }
 
+            .level-selector {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .level-select {
+                flex: 1;
+                max-width: 150px;
+            }
+
+            .legend-items {
+                gap: 1rem;
+            }
+
+            .legend-item {
+                font-size: 0.85rem;
+            }
+
+            .vocab-meta {
+                grid-template-columns: 1fr;
+            }
+
             .post-content {
                 font-size: 1rem;
             }
@@ -475,12 +604,15 @@
         const ExternalLink = ({ size, style }) => <i data-lucide="external-link" style={style}></i>;
         const Settings = () => <i data-lucide="settings"></i>;
         const X = () => <i data-lucide="x"></i>;
+        const ChevronDown = () => <i data-lucide="chevron-down"></i>;
 
         const WaniKaniSNSLearner = () => {
             const [apiKey, setApiKey] = useState('');
             const [isConfigured, setIsConfigured] = useState(false);
             const [userLevel, setUserLevel] = useState(null);
+            const [selectedLevel, setSelectedLevel] = useState(null);
             const [vocabulary, setVocabulary] = useState([]);
+            const [assignments, setAssignments] = useState({});
             const [posts, setPosts] = useState([]);
             const [loading, setLoading] = useState(false);
             const [selectedWord, setSelectedWord] = useState(null);
@@ -493,9 +625,19 @@
                 }
             });
 
+            const getSRSStage = (srsStage) => {
+                if (srsStage === 9) return 'burned';
+                if (srsStage >= 7) return 'enlightened';
+                if (srsStage >= 6) return 'master';
+                if (srsStage >= 5) return 'guru';
+                if (srsStage >= 1) return 'apprentice';
+                return 'new';
+            };
+
             const fetchWaniKaniData = async (key) => {
                 setLoading(true);
                 try {
+                    // Fetch user information
                     const userResponse = await fetch('https://api.wanikani.com/v2/user', {
                         headers: {
                             'Authorization': `Bearer ${key}`,
@@ -508,9 +650,12 @@
                     const userData = await userResponse.json();
                     const level = userData.data.level;
                     setUserLevel(level);
+                    setSelectedLevel(level);
 
+                    // Fetch vocabulary for all levels up to current
+                    const levelRange = Array.from({length: level}, (_, i) => i + 1).join(',');
                     const vocabResponse = await fetch(
-                        `https://api.wanikani.com/v2/subjects?types=vocabulary&levels=${level}`,
+                        `https://api.wanikani.com/v2/subjects?types=vocabulary&levels=${levelRange}`,
                         {
                             headers: {
                                 'Authorization': `Bearer ${key}`,
@@ -520,14 +665,41 @@
                     );
 
                     const vocabData = await vocabResponse.json();
+                    
+                    // Fetch assignments to get SRS stages
+                    const assignmentsResponse = await fetch(
+                        'https://api.wanikani.com/v2/assignments?subject_types=vocabulary',
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${key}`,
+                                'Wanikani-Revision': '20170710'
+                            }
+                        }
+                    );
+
+                    const assignmentsData = await assignmentsResponse.json();
+                    
+                    // Create a map of subject_id to SRS stage
+                    const assignmentsMap = {};
+                    assignmentsData.data.forEach(assignment => {
+                        assignmentsMap[assignment.data.subject_id] = {
+                            srsStage: assignment.data.srs_stage,
+                            stage: getSRSStage(assignment.data.srs_stage)
+                        };
+                    });
+
                     const vocabList = vocabData.data.map(item => ({
+                        id: item.id,
                         characters: item.data.characters,
                         meanings: item.data.meanings.map(m => m.meaning),
                         readings: item.data.readings.map(r => r.reading),
-                        level: item.data.level
+                        level: item.data.level,
+                        srsStage: assignmentsMap[item.id]?.srsStage || 0,
+                        stage: assignmentsMap[item.id]?.stage || 'new'
                     }));
 
                     setVocabulary(vocabList);
+                    setAssignments(assignmentsMap);
                     setIsConfigured(true);
                     
                     generateSamplePosts(vocabList, level);
@@ -539,7 +711,12 @@
                 }
             };
 
-            const generateSamplePosts = (vocabList, level) => {
+            const generateSamplePosts = (vocabList, targetLevel) => {
+                // Filter vocabulary up to the selected level
+                const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
+                
+                if (filteredVocab.length === 0) return;
+
                 const samplePosts = [
                     {
                         username: '田中さくら',
@@ -588,7 +765,7 @@
                     const usedWords = [];
 
                     template.vocabIndices.forEach((_, idx) => {
-                        const randomVocab = vocabList[Math.floor(Math.random() * vocabList.length)];
+                        const randomVocab = filteredVocab[Math.floor(Math.random() * filteredVocab.length)];
                         usedWords.push(randomVocab);
                         content = content.replace(`{${idx}}`, randomVocab.characters);
                     });
@@ -614,7 +791,34 @@
 
             const refreshPosts = () => {
                 if (vocabulary.length > 0) {
-                    generateSamplePosts(vocabulary, userLevel);
+                    generateSamplePosts(vocabulary, selectedLevel);
+                }
+            };
+
+            const handleLevelChange = (newLevel) => {
+                setSelectedLevel(newLevel);
+                generateSamplePosts(vocabulary, newLevel);
+            };
+
+            const getStageColor = (stage) => {
+                switch(stage) {
+                    case 'burned': return '#4a5568';
+                    case 'enlightened': return '#805ad5';
+                    case 'master': return '#3182ce';
+                    case 'guru': return '#38a169';
+                    case 'apprentice': return '#dd6b20';
+                    default: return '#e53e3e';
+                }
+            };
+
+            const getStageLabel = (stage) => {
+                switch(stage) {
+                    case 'burned': return '🔥 Burned';
+                    case 'enlightened': return '✨ Enlightened';
+                    case 'master': return '🎓 Master';
+                    case 'guru': return '🌟 Guru';
+                    case 'apprentice': return '📝 Apprentice';
+                    default: return '🆕 New';
                 }
             };
 
@@ -631,11 +835,17 @@
                             );
                         }
                         
+                        const stageColor = getStageColor(vocab.stage);
                         result.push(
                             <span
                                 key={`vocab-${idx}`}
                                 className="vocabulary-highlight"
                                 onClick={() => setSelectedWord(vocab)}
+                                style={{
+                                    borderBottomColor: stageColor,
+                                    background: `linear-gradient(120deg, ${stageColor}15 0%, ${stageColor}25 100%)`
+                                }}
+                                title={getStageLabel(vocab.stage)}
                             >
                                 {vocab.characters}
                             </span>
@@ -702,6 +912,24 @@
                                     <BookOpen />
                                     <span>Level {userLevel}</span>
                                 </div>
+                                
+                                <div className="level-selector">
+                                    <label style={{ marginRight: '0.5rem', color: '#4a5568', fontWeight: '500' }}>
+                                        Study Level:
+                                    </label>
+                                    <select 
+                                        value={selectedLevel} 
+                                        onChange={(e) => handleLevelChange(parseInt(e.target.value))}
+                                        className="level-select"
+                                    >
+                                        {Array.from({length: userLevel}, (_, i) => i + 1).map(level => (
+                                            <option key={level} value={level}>
+                                                Level {level}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
                                 <button className="refresh-btn" onClick={refreshPosts}>
                                     <Sparkles />
                                     New Posts
@@ -710,6 +938,36 @@
                                     <Settings />
                                     Settings
                                 </button>
+                            </div>
+
+                            <div className="legend-bar">
+                                <div className="legend-title">SRS Stages:</div>
+                                <div className="legend-items">
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('new')}}></span>
+                                        <span>New</span>
+                                    </div>
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('apprentice')}}></span>
+                                        <span>Apprentice</span>
+                                    </div>
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('guru')}}></span>
+                                        <span>Guru</span>
+                                    </div>
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('master')}}></span>
+                                        <span>Master</span>
+                                    </div>
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('enlightened')}}></span>
+                                        <span>Enlightened</span>
+                                    </div>
+                                    <div className="legend-item">
+                                        <span className="legend-dot" style={{background: getStageColor('burned')}}></span>
+                                        <span>Burned</span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="posts-grid">
@@ -753,6 +1011,26 @@
                                 </div>
                                 <div className="vocab-detail">
                                     <div className="vocab-character">{selectedWord.characters}</div>
+                                    
+                                    <div className="vocab-meta">
+                                        <div className="vocab-meta-item">
+                                            <span className="vocab-meta-label">Level:</span>
+                                            <span className="vocab-meta-value">{selectedWord.level}</span>
+                                        </div>
+                                        <div className="vocab-meta-item">
+                                            <span className="vocab-meta-label">SRS Stage:</span>
+                                            <span 
+                                                className="vocab-meta-badge"
+                                                style={{
+                                                    background: getStageColor(selectedWord.stage),
+                                                    color: 'white'
+                                                }}
+                                            >
+                                                {getStageLabel(selectedWord.stage)}
+                                            </span>
+                                        </div>
+                                    </div>
+
                                     <div className="vocab-section">
                                         <div className="vocab-section-title">Meanings</div>
                                         <div className="vocab-list">
@@ -784,8 +1062,37 @@
                                     <div className="vocab-list">Level {userLevel}</div>
                                 </div>
                                 <div className="vocab-section">
-                                    <div className="vocab-section-title">Vocabulary Count</div>
-                                    <div className="vocab-list">{vocabulary.length} words at your level</div>
+                                    <div className="vocab-section-title">Study Level</div>
+                                    <div className="vocab-list">Level {selectedLevel}</div>
+                                </div>
+                                <div className="vocab-section">
+                                    <div className="vocab-section-title">Vocabulary Statistics</div>
+                                    <div className="vocab-list">
+                                        <div style={{ marginBottom: '0.5rem' }}>
+                                            Total: {vocabulary.filter(v => v.level <= selectedLevel).length} words (up to level {selectedLevel})
+                                        </div>
+                                        <div style={{ display: 'grid', gap: '0.5rem', marginTop: '1rem' }}>
+                                            {['burned', 'enlightened', 'master', 'guru', 'apprentice', 'new'].map(stage => {
+                                                const count = vocabulary.filter(v => v.level <= selectedLevel && v.stage === stage).length;
+                                                if (count === 0) return null;
+                                                return (
+                                                    <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <span 
+                                                            style={{ 
+                                                                width: '10px', 
+                                                                height: '10px', 
+                                                                borderRadius: '50%', 
+                                                                background: getStageColor(stage),
+                                                                display: 'inline-block'
+                                                            }}
+                                                        ></span>
+                                                        <span style={{ textTransform: 'capitalize' }}>{stage}:</span>
+                                                        <span style={{ fontWeight: '600' }}>{count}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                 </div>
                                 <button 
                                     className="submit-btn" 
