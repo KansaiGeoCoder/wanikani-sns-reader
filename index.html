@@ -380,6 +380,32 @@
             font-weight: 400;
         }
 
+        .knowledge-bar {
+            width: 100%;
+            height: 24px;
+            background: #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+
+        .knowledge-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #38a169 0%, #48bb78 50%, #68d391 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: width 0.5s ease;
+            min-width: 50px;
+        }
+
+        .knowledge-text {
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
         .vocabulary-highlight {
             background: linear-gradient(120deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
             padding: 2px 4px;
@@ -649,16 +675,35 @@
                 return 'new';
             };
 
+            // Helper function to fetch all pages from WaniKani API
+            const fetchAllPages = async (url, headers) => {
+                let allData = [];
+                let nextUrl = url;
+                
+                while (nextUrl) {
+                    const response = await fetch(nextUrl, { headers });
+                    if (!response.ok) throw new Error('API request failed');
+                    
+                    const data = await response.json();
+                    allData = allData.concat(data.data);
+                    
+                    // Check if there's a next page
+                    nextUrl = data.pages?.next_url;
+                }
+                
+                return allData;
+            };
+
             const fetchWaniKaniData = async (key) => {
                 setLoading(true);
                 try {
+                    const headers = {
+                        'Authorization': `Bearer ${key}`,
+                        'Wanikani-Revision': '20170710'
+                    };
+
                     // Fetch user information
-                    const userResponse = await fetch('https://api.wanikani.com/v2/user', {
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                            'Wanikani-Revision': '20170710'
-                        }
-                    });
+                    const userResponse = await fetch('https://api.wanikani.com/v2/user', { headers });
                     
                     if (!userResponse.ok) throw new Error('Invalid API key');
                     
@@ -667,43 +712,35 @@
                     setUserLevel(level);
                     setSelectedLevel(level);
 
-                    // Fetch vocabulary for all levels up to current
+                    console.log('Fetching vocabulary for levels 1-' + level + '...');
+
+                    // Fetch ALL vocabulary for all levels up to current (with pagination)
                     const levelRange = Array.from({length: level}, (_, i) => i + 1).join(',');
-                    const vocabResponse = await fetch(
+                    const vocabData = await fetchAllPages(
                         `https://api.wanikani.com/v2/subjects?types=vocabulary&levels=${levelRange}`,
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${key}`,
-                                'Wanikani-Revision': '20170710'
-                            }
-                        }
+                        headers
                     );
-
-                    const vocabData = await vocabResponse.json();
                     
-                    // Fetch assignments to get SRS stages
-                    const assignmentsResponse = await fetch(
-                        'https://api.wanikani.com/v2/assignments?subject_types=vocabulary',
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${key}`,
-                                'Wanikani-Revision': '20170710'
-                            }
-                        }
-                    );
+                    console.log('Total vocabulary items fetched:', vocabData.length);
 
-                    const assignmentsData = await assignmentsResponse.json();
+                    // Fetch ALL assignments to get SRS stages (with pagination)
+                    const assignmentsData = await fetchAllPages(
+                        'https://api.wanikani.com/v2/assignments?subject_types=vocabulary',
+                        headers
+                    );
+                    
+                    console.log('Total assignments fetched:', assignmentsData.length);
                     
                     // Create a map of subject_id to SRS stage
                     const assignmentsMap = {};
-                    assignmentsData.data.forEach(assignment => {
+                    assignmentsData.forEach(assignment => {
                         assignmentsMap[assignment.data.subject_id] = {
                             srsStage: assignment.data.srs_stage,
                             stage: getSRSStage(assignment.data.srs_stage)
                         };
                     });
 
-                    const vocabList = vocabData.data.map(item => ({
+                    const vocabList = vocabData.map(item => ({
                         id: item.id,
                         characters: item.data.characters,
                         meanings: item.data.meanings.map(m => m.meaning),
@@ -732,32 +769,36 @@
                 const allContent = [];
 
                 try {
+                    console.log('Fetching Japanese content...');
+                    
                     // Fetch from NHK News Easy (using CORS proxy)
                     try {
-                        // Using corsproxy.io to bypass CORS restrictions
+                        console.log('Fetching NHK News Easy...');
                         const nhkResponse = await fetch('https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/news-list.json');
                         const nhkData = await nhkResponse.json();
                         
                         const articles = nhkData[0]?.list || [];
-                        for (const article of articles.slice(0, 10)) {
+                        console.log('Found', articles.length, 'NHK articles');
+                        
+                        for (const article of articles.slice(0, 15)) {
                             try {
                                 const articleResponse = await fetch(`https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`);
                                 const html = await articleResponse.text();
                                 
-                                // Extract sentences from HTML
                                 const parser = new DOMParser();
                                 const doc = parser.parseFromString(html, 'text/html');
                                 const paragraphs = doc.querySelectorAll('p');
                                 
                                 paragraphs.forEach(p => {
                                     const text = p.textContent.trim();
-                                    if (text.length > 10) {
+                                    if (text.length > 15 && text.length < 150) {
                                         // Split into sentences
                                         const sentences = text.split(/[。！？]/);
                                         sentences.forEach(sentence => {
-                                            if (sentence.trim().length > 10) {
+                                            const cleaned = sentence.trim();
+                                            if (cleaned.length > 15 && cleaned.length < 120) {
                                                 allContent.push({
-                                                    text: sentence.trim() + '。',
+                                                    text: cleaned + '。',
                                                     source: 'NHK News Easy',
                                                     sourceIcon: '📰',
                                                     title: article.title,
@@ -771,105 +812,156 @@
                                 console.log('Error fetching NHK article:', e);
                             }
                         }
+                        console.log('NHK content extracted:', allContent.length);
                     } catch (e) {
                         console.log('Error fetching NHK news:', e);
                     }
 
                     // Fetch from Reddit (Japanese subreddits)
                     try {
-                        const subreddits = ['newsokur', 'japan', 'LearnJapanese'];
+                        console.log('Fetching Reddit content...');
+                        const subreddits = ['newsokur', 'japan_anime', 'newsokuexp', 'BakaNewsJP'];
                         for (const subreddit of subreddits) {
-                            const redditResponse = await fetch(`https://www.reddit.com/r/${subreddit}.json?limit=25`);
-                            const redditData = await redditResponse.json();
-                            
-                            redditData.data.children.forEach(post => {
-                                const title = post.data.title;
-                                const selftext = post.data.selftext;
+                            try {
+                                const redditResponse = await fetch(`https://www.reddit.com/r/${subreddit}.json?limit=50`);
+                                const redditData = await redditResponse.json();
                                 
-                                // Check if content contains Japanese characters
-                                if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(title)) {
-                                    allContent.push({
-                                        text: title,
-                                        source: `r/${subreddit}`,
-                                        sourceIcon: '💬',
-                                        title: post.data.author,
-                                        url: `https://www.reddit.com${post.data.permalink}`
-                                    });
-                                }
-                                
-                                if (selftext && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(selftext)) {
-                                    const sentences = selftext.split(/[。！？\n]/);
-                                    sentences.forEach(sentence => {
-                                        if (sentence.trim().length > 10) {
-                                            allContent.push({
-                                                text: sentence.trim() + '。',
-                                                source: `r/${subreddit}`,
-                                                sourceIcon: '💬',
-                                                title: post.data.author,
-                                                url: `https://www.reddit.com${post.data.permalink}`
-                                            });
-                                        }
-                                    });
-                                }
-                            });
+                                redditData.data.children.forEach(post => {
+                                    const title = post.data.title;
+                                    const selftext = post.data.selftext;
+                                    
+                                    // Check if content contains Japanese characters
+                                    if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(title) && title.length > 15 && title.length < 120) {
+                                        allContent.push({
+                                            text: title,
+                                            source: `r/${subreddit}`,
+                                            sourceIcon: '💬',
+                                            title: post.data.author,
+                                            url: `https://www.reddit.com${post.data.permalink}`
+                                        });
+                                    }
+                                    
+                                    if (selftext && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(selftext)) {
+                                        const sentences = selftext.split(/[。！？\n]/);
+                                        sentences.forEach(sentence => {
+                                            const cleaned = sentence.trim();
+                                            if (cleaned.length > 15 && cleaned.length < 120) {
+                                                allContent.push({
+                                                    text: cleaned + '。',
+                                                    source: `r/${subreddit}`,
+                                                    sourceIcon: '💬',
+                                                    title: post.data.author,
+                                                    url: `https://www.reddit.com${post.data.permalink}`
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            } catch (e) {
+                                console.log(`Error fetching r/${subreddit}:`, e);
+                            }
                         }
+                        console.log('Total content after Reddit:', allContent.length);
                     } catch (e) {
                         console.log('Error fetching Reddit:', e);
                     }
 
+                    console.log('Total content collected:', allContent.length);
+
                     if (allContent.length === 0) {
-                        console.log('No content fetched. This might be due to CORS restrictions.');
-                        alert('Unable to fetch Japanese content. This may be due to browser security restrictions (CORS). The app works best when hosted on a web server with a CORS proxy, or you can install a CORS browser extension.');
+                        console.log('No content fetched. This might be due to CORS restrictions or API issues.');
+                        alert('Unable to fetch Japanese content. This may be due to browser security restrictions (CORS) or the content sources being temporarily unavailable. Please try refreshing.');
                     }
 
                     // Match sentences with vocabulary
                     const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
+                    console.log('Matching against', filteredVocab.length, 'vocabulary items');
+                    
                     const matchedPosts = matchSentencesWithVocab(allContent, filteredVocab);
+                    console.log('Found', matchedPosts.length, 'matched sentences');
                     
                     if (matchedPosts.length === 0 && allContent.length > 0) {
-                        alert('Content was fetched but no sentences matched your vocabulary. Try a different level or refresh.');
+                        alert('Content was fetched but no sentences matched your vocabulary well. Try a different level or refresh for new content.');
                     }
                     
-                    setPosts(matchedPosts.slice(0, 10)); // Show top 10 matches
+                    setPosts(matchedPosts.slice(0, 15)); // Show top 15 matches
                 } catch (error) {
                     console.error('Error fetching content:', error);
-                    alert('Error fetching Japanese content. Please try again. Note: This feature requires internet access and may be blocked by CORS policies.');
+                    alert('Error fetching Japanese content. Please try again. Check the browser console for details.');
                 } finally {
                     setLoading(false);
                 }
             };
 
-            // Match sentences with user's vocabulary
+            // Match sentences with user's vocabulary - improved algorithm
             const matchSentencesWithVocab = (contentArray, vocabList) => {
                 const vocabSet = new Set(vocabList.map(v => v.characters));
                 
                 // Score each sentence based on vocabulary matches
                 const scoredContent = contentArray.map(content => {
                     const matches = [];
-                    let matchCount = 0;
+                    let totalKnownChars = 0;
                     
                     // Find all vocabulary matches in the sentence
-                    vocabList.forEach(vocab => {
-                        if (content.text.includes(vocab.characters)) {
-                            matches.push(vocab);
-                            matchCount++;
+                    const matchedPositions = new Set();
+                    
+                    // Sort vocabulary by length (longest first) to match longer words first
+                    const sortedVocab = [...vocabList].sort((a, b) => 
+                        b.characters.length - a.characters.length
+                    );
+                    
+                    sortedVocab.forEach(vocab => {
+                        let searchPos = 0;
+                        while (true) {
+                            const index = content.text.indexOf(vocab.characters, searchPos);
+                            if (index === -1) break;
+                            
+                            // Check if this position hasn't been matched by a longer word
+                            let alreadyMatched = false;
+                            for (let i = index; i < index + vocab.characters.length; i++) {
+                                if (matchedPositions.has(i)) {
+                                    alreadyMatched = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!alreadyMatched) {
+                                matches.push({...vocab, position: index});
+                                totalKnownChars += vocab.characters.length;
+                                
+                                // Mark these positions as matched
+                                for (let i = index; i < index + vocab.characters.length; i++) {
+                                    matchedPositions.add(i);
+                                }
+                            }
+                            
+                            searchPos = index + 1;
                         }
                     });
                     
-                    // Calculate score (prefer more matches and appropriate difficulty)
-                    const score = matchCount * 10 + (matches.length > 0 ? 1 / content.text.length : 0);
+                    // Count Japanese characters in the sentence (hiragana, katakana, kanji)
+                    const japaneseChars = (content.text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length;
+                    
+                    // Calculate percentage of known content
+                    const knownPercentage = japaneseChars > 0 ? (totalKnownChars / japaneseChars) * 100 : 0;
+                    
+                    // Calculate score - heavily favor sentences with high known percentage
+                    const matchCount = matches.length;
+                    const lengthPenalty = Math.max(0, 100 - content.text.length) / 100; // Prefer shorter sentences
+                    const score = (knownPercentage * 10) + (matchCount * 5) + lengthPenalty;
                     
                     return {
                         ...content,
                         vocabulary: matches,
                         matchCount,
+                        knownPercentage,
                         score
                     };
                 });
                 
-                // Filter to only sentences with at least one match and sort by score
+                // Filter to sentences with at least 40% known vocabulary and sort by score
                 return scoredContent
-                    .filter(c => c.matchCount > 0)
+                    .filter(c => c.knownPercentage >= 40 && c.matchCount > 0)
                     .sort((a, b) => b.score - a.score)
                     .map(content => ({
                         username: content.source,
@@ -879,8 +971,9 @@
                         finalContent: content.text,
                         vocabulary: content.vocabulary,
                         likes: content.matchCount,
-                        retweets: Math.floor(content.score),
-                        sourceUrl: content.url
+                        retweets: Math.round(content.knownPercentage),
+                        sourceUrl: content.url,
+                        knownPercentage: content.knownPercentage
                     }));
             };
 
@@ -925,38 +1018,43 @@
             };
 
             const highlightVocabulary = (content, vocabList) => {
+                // Sort vocabulary by position to highlight in order
+                const sortedVocab = [...vocabList].sort((a, b) => a.position - b.position);
+                
                 let result = [];
                 let lastIndex = 0;
                 
-                vocabList.forEach((vocab, idx) => {
-                    const index = content.indexOf(vocab.characters, lastIndex);
-                    if (index !== -1) {
-                        if (index > lastIndex) {
-                            result.push(
-                                <span key={`text-${idx}`}>{content.slice(lastIndex, index)}</span>
-                            );
-                        }
-                        
-                        const stageColor = getStageColor(vocab.stage);
+                sortedVocab.forEach((vocab, idx) => {
+                    const position = vocab.position;
+                    
+                    // Add text before this vocabulary word
+                    if (position > lastIndex) {
                         result.push(
-                            <span
-                                key={`vocab-${idx}`}
-                                className="vocabulary-highlight"
-                                onClick={() => setSelectedWord(vocab)}
-                                style={{
-                                    borderBottomColor: stageColor,
-                                    background: `linear-gradient(120deg, ${stageColor}15 0%, ${stageColor}25 100%)`
-                                }}
-                                title={getStageLabel(vocab.stage)}
-                            >
-                                {vocab.characters}
-                            </span>
+                            <span key={`text-${idx}`}>{content.slice(lastIndex, position)}</span>
                         );
-                        
-                        lastIndex = index + vocab.characters.length;
                     }
+                    
+                    // Add highlighted vocabulary
+                    const stageColor = getStageColor(vocab.stage);
+                    result.push(
+                        <span
+                            key={`vocab-${idx}-${position}`}
+                            className="vocabulary-highlight"
+                            onClick={() => setSelectedWord(vocab)}
+                            style={{
+                                borderBottomColor: stageColor,
+                                background: `linear-gradient(120deg, ${stageColor}15 0%, ${stageColor}25 100%)`
+                            }}
+                            title={getStageLabel(vocab.stage)}
+                        >
+                            {vocab.characters}
+                        </span>
+                    );
+                    
+                    lastIndex = position + vocab.characters.length;
                 });
                 
+                // Add remaining text after last vocabulary word
                 if (lastIndex < content.length) {
                     result.push(
                         <span key="text-end">{content.slice(lastIndex)}</span>
@@ -1091,10 +1189,15 @@
                                             <div className="post-content">
                                                 {highlightVocabulary(post.finalContent, post.vocabulary)}
                                             </div>
+                                            <div className="knowledge-bar">
+                                                <div className="knowledge-bar-fill" style={{ width: `${post.retweets}%` }}>
+                                                    <span className="knowledge-text">{post.retweets}% known</span>
+                                                </div>
+                                            </div>
                                             <div className="post-stats">
-                                                <div className="stat" title="Vocabulary matches">
+                                                <div className="stat" title="Number of your vocabulary words in this sentence">
                                                     <span>📚</span>
-                                                    <span>{post.likes} words</span>
+                                                    <span>{post.likes} {post.likes === 1 ? 'word' : 'words'}</span>
                                                 </div>
                                                 {post.sourceUrl && (
                                                     <a 
