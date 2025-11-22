@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>和にKani - WaniKani SNS Learner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .app-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: white;
+            margin: 0;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .app-subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+            font-weight: 300;
+            margin-top: 0.5rem;
+        }
+
+        .config-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .config-title {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #1a1a2e;
+            font-weight: 500;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .api-input {
+            width: 100%;
+            padding: 0.875rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: monospace;
+            transition: all 0.3s ease;
+        }
+
+        .api-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .help-text {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #718096;
+            line-height: 1.5;
+        }
+
+        .help-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .help-link:hover {
+            text-decoration: underline;
+        }
+
+        .main-content {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .controls-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .level-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+        }
+
+        .refresh-btn, .settings-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 1rem;
+        }
+
+        .refresh-btn:hover, .settings-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+        }
+
+        .posts-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .post-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeInUp 0.5s ease-out both;
+        }
+
+        .post-card:nth-child(1) { animation-delay: 0.1s; }
+        .post-card:nth-child(2) { animation-delay: 0.2s; }
+        .post-card:nth-child(3) { animation-delay: 0.3s; }
+        .post-card:nth-child(4) { animation-delay: 0.4s; }
+        .post-card:nth-child(5) { animation-delay: 0.5s; }
+
+        .post-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+
+        .post-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .user-info {
+            flex: 1;
+        }
+
+        .username {
+            font-weight: 600;
+            color: #1a1a2e;
+            margin-bottom: 0.25rem;
+        }
+
+        .handle {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .timestamp {
+            color: #a0aec0;
+            font-size: 0.85rem;
+        }
+
+        .post-content {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: #2d3748;
+            margin-bottom: 1rem;
+            font-weight: 400;
+        }
+
+        .vocabulary-highlight {
+            background: linear-gradient(120deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+            padding: 2px 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .vocabulary-highlight:hover {
+            background: linear-gradient(120deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.25) 100%);
+            border-bottom-color: rgba(102, 126, 234, 0.6);
+        }
+
+        .post-stats {
+            display: flex;
+            gap: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease-out;
+            padding: 1rem;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: scaleIn 0.3s ease-out;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            color: #718096;
+            transition: color 0.2s ease;
+        }
+
+        .close-btn:hover {
+            color: #1a1a2e;
+        }
+
+        .vocab-detail {
+            margin-bottom: 1.5rem;
+        }
+
+        .vocab-character {
+            font-size: 3rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #667eea;
+        }
+
+        .vocab-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .vocab-section-title {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .vocab-list {
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 8px;
+            line-height: 1.8;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                padding: 1rem;
+            }
+
+            .app-title {
+                font-size: 2rem;
+            }
+
+            .controls-bar {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .post-content {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Load React, ReactDOM, and Babel from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Lucide icon components
+        const Search = () => <i data-lucide="search"></i>;
+        const BookOpen = () => <i data-lucide="book-open"></i>;
+        const Sparkles = () => <i data-lucide="sparkles"></i>;
+        const ExternalLink = ({ size, style }) => <i data-lucide="external-link" style={style}></i>;
+        const Settings = () => <i data-lucide="settings"></i>;
+        const X = () => <i data-lucide="x"></i>;
+
+        const WaniKaniSNSLearner = () => {
+            const [apiKey, setApiKey] = useState('');
+            const [isConfigured, setIsConfigured] = useState(false);
+            const [userLevel, setUserLevel] = useState(null);
+            const [vocabulary, setVocabulary] = useState([]);
+            const [posts, setPosts] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [selectedWord, setSelectedWord] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+
+            useEffect(() => {
+                // Initialize Lucide icons after component mounts/updates
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            const fetchWaniKaniData = async (key) => {
+                setLoading(true);
+                try {
+                    const userResponse = await fetch('https://api.wanikani.com/v2/user', {
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Wanikani-Revision': '20170710'
+                        }
+                    });
+                    
+                    if (!userResponse.ok) throw new Error('Invalid API key');
+                    
+                    const userData = await userResponse.json();
+                    const level = userData.data.level;
+                    setUserLevel(level);
+
+                    const vocabResponse = await fetch(
+                        `https://api.wanikani.com/v2/subjects?types=vocabulary&levels=${level}`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${key}`,
+                                'Wanikani-Revision': '20170710'
+                            }
+                        }
+                    );
+
+                    const vocabData = await vocabResponse.json();
+                    const vocabList = vocabData.data.map(item => ({
+                        characters: item.data.characters,
+                        meanings: item.data.meanings.map(m => m.meaning),
+                        readings: item.data.readings.map(r => r.reading),
+                        level: item.data.level
+                    }));
+
+                    setVocabulary(vocabList);
+                    setIsConfigured(true);
+                    
+                    generateSamplePosts(vocabList, level);
+                } catch (error) {
+                    alert('Error fetching WaniKani data. Please check your API key.');
+                    console.error(error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const generateSamplePosts = (vocabList, level) => {
+                const samplePosts = [
+                    {
+                        username: '田中さくら',
+                        handle: '@sakura_tanaka',
+                        avatar: '🌸',
+                        timestamp: '2時間前',
+                        content: `今日は{0}で{1}を{2}ました。とても{3}でした！`,
+                        vocabIndices: [0, 1, 2, 3]
+                    },
+                    {
+                        username: '山田健太',
+                        handle: '@kenta_y',
+                        avatar: '⛰️',
+                        timestamp: '5時間前',
+                        content: `{0}に{1}があります。{2}は{3}だと思います。`,
+                        vocabIndices: [4, 5, 6, 7]
+                    },
+                    {
+                        username: '鈴木美咲',
+                        handle: '@misaki_s',
+                        avatar: '🎨',
+                        timestamp: '1日前',
+                        content: `この{0}は本当に{1}ですね。{2}したいです。`,
+                        vocabIndices: [8, 9, 10]
+                    },
+                    {
+                        username: '佐藤太郎',
+                        handle: '@taro_sato',
+                        avatar: '📚',
+                        timestamp: '3日前',
+                        content: `{0}を{1}しています。毎日{2}を{3}ています。`,
+                        vocabIndices: [11, 12, 13, 14]
+                    },
+                    {
+                        username: 'ひなこ',
+                        handle: '@hinako_chan',
+                        avatar: '🌺',
+                        timestamp: '1週間前',
+                        content: `友達と{0}に行きました。{1}を{2}て、{3}しました。`,
+                        vocabIndices: [15, 16, 17, 18]
+                    }
+                ];
+
+                const generatedPosts = samplePosts.map(template => {
+                    let content = template.content;
+                    const usedWords = [];
+
+                    template.vocabIndices.forEach((_, idx) => {
+                        const randomVocab = vocabList[Math.floor(Math.random() * vocabList.length)];
+                        usedWords.push(randomVocab);
+                        content = content.replace(`{${idx}}`, randomVocab.characters);
+                    });
+
+                    return {
+                        ...template,
+                        finalContent: content,
+                        vocabulary: usedWords,
+                        likes: Math.floor(Math.random() * 500),
+                        retweets: Math.floor(Math.random() * 100)
+                    };
+                });
+
+                setPosts(generatedPosts);
+            };
+
+            const handleConfigSubmit = (e) => {
+                e.preventDefault();
+                if (apiKey.trim()) {
+                    fetchWaniKaniData(apiKey.trim());
+                }
+            };
+
+            const refreshPosts = () => {
+                if (vocabulary.length > 0) {
+                    generateSamplePosts(vocabulary, userLevel);
+                }
+            };
+
+            const highlightVocabulary = (content, vocabList) => {
+                let result = [];
+                let lastIndex = 0;
+                
+                vocabList.forEach((vocab, idx) => {
+                    const index = content.indexOf(vocab.characters, lastIndex);
+                    if (index !== -1) {
+                        if (index > lastIndex) {
+                            result.push(
+                                <span key={`text-${idx}`}>{content.slice(lastIndex, index)}</span>
+                            );
+                        }
+                        
+                        result.push(
+                            <span
+                                key={`vocab-${idx}`}
+                                className="vocabulary-highlight"
+                                onClick={() => setSelectedWord(vocab)}
+                            >
+                                {vocab.characters}
+                            </span>
+                        );
+                        
+                        lastIndex = index + vocab.characters.length;
+                    }
+                });
+                
+                if (lastIndex < content.length) {
+                    result.push(
+                        <span key="text-end">{content.slice(lastIndex)}</span>
+                    );
+                }
+                
+                return result;
+            };
+
+            return (
+                <div className="app-container">
+                    <div className="header">
+                        <div className="logo">
+                            <div className="logo-icon">🎌</div>
+                            <h1 className="app-title">和にKani</h1>
+                        </div>
+                        <p className="app-subtitle">Learn Japanese through real-world social media content</p>
+                    </div>
+
+                    {!isConfigured ? (
+                        <div className="config-card">
+                            <h2 className="config-title">Connect Your WaniKani Account</h2>
+                            <form onSubmit={handleConfigSubmit}>
+                                <div className="input-group">
+                                    <label className="input-label">WaniKani API Key</label>
+                                    <input
+                                        type="password"
+                                        className="api-input"
+                                        value={apiKey}
+                                        onChange={(e) => setApiKey(e.target.value)}
+                                        placeholder="Enter your WaniKani API v2 token"
+                                        disabled={loading}
+                                    />
+                                </div>
+                                <button type="submit" className="submit-btn" disabled={loading || !apiKey.trim()}>
+                                    {loading ? 'Connecting...' : 'Start Learning'}
+                                </button>
+                                <p className="help-text">
+                                    Get your API key from{' '}
+                                    <a 
+                                        href="https://www.wanikani.com/settings/personal_access_tokens" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="help-link"
+                                    >
+                                        WaniKani Settings <ExternalLink size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                                    </a>
+                                </p>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className="main-content">
+                            <div className="controls-bar">
+                                <div className="level-badge">
+                                    <BookOpen />
+                                    <span>Level {userLevel}</span>
+                                </div>
+                                <button className="refresh-btn" onClick={refreshPosts}>
+                                    <Sparkles />
+                                    New Posts
+                                </button>
+                                <button className="settings-btn" onClick={() => setShowSettings(true)}>
+                                    <Settings />
+                                    Settings
+                                </button>
+                            </div>
+
+                            <div className="posts-grid">
+                                {posts.map((post, idx) => (
+                                    <div key={idx} className="post-card">
+                                        <div className="post-header">
+                                            <div className="avatar">{post.avatar}</div>
+                                            <div className="user-info">
+                                                <div className="username">{post.username}</div>
+                                                <div className="handle">{post.handle}</div>
+                                            </div>
+                                            <div className="timestamp">{post.timestamp}</div>
+                                        </div>
+                                        <div className="post-content">
+                                            {highlightVocabulary(post.finalContent, post.vocabulary)}
+                                        </div>
+                                        <div className="post-stats">
+                                            <div className="stat">
+                                                <span>❤️</span>
+                                                <span>{post.likes}</span>
+                                            </div>
+                                            <div className="stat">
+                                                <span>🔄</span>
+                                                <span>{post.retweets}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {selectedWord && (
+                        <div className="modal-overlay" onClick={() => setSelectedWord(null)}>
+                            <div className="modal" onClick={(e) => e.stopPropagation()}>
+                                <div className="modal-header">
+                                    <h3 className="modal-title">Vocabulary</h3>
+                                    <button className="close-btn" onClick={() => setSelectedWord(null)}>
+                                        <X />
+                                    </button>
+                                </div>
+                                <div className="vocab-detail">
+                                    <div className="vocab-character">{selectedWord.characters}</div>
+                                    <div className="vocab-section">
+                                        <div className="vocab-section-title">Meanings</div>
+                                        <div className="vocab-list">
+                                            {selectedWord.meanings.join(', ')}
+                                        </div>
+                                    </div>
+                                    <div className="vocab-section">
+                                        <div className="vocab-section-title">Readings</div>
+                                        <div className="vocab-list">
+                                            {selectedWord.readings.join(', ')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showSettings && (
+                        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+                            <div className="modal" onClick={(e) => e.stopPropagation()}>
+                                <div className="modal-header">
+                                    <h3 className="modal-title">Settings</h3>
+                                    <button className="close-btn" onClick={() => setShowSettings(false)}>
+                                        <X />
+                                    </button>
+                                </div>
+                                <div className="vocab-section">
+                                    <div className="vocab-section-title">Current Level</div>
+                                    <div className="vocab-list">Level {userLevel}</div>
+                                </div>
+                                <div className="vocab-section">
+                                    <div className="vocab-section-title">Vocabulary Count</div>
+                                    <div className="vocab-list">{vocabulary.length} words at your level</div>
+                                </div>
+                                <button 
+                                    className="submit-btn" 
+                                    onClick={() => {
+                                        setIsConfigured(false);
+                                        setShowSettings(false);
+                                        setApiKey('');
+                                    }}
+                                    style={{ marginTop: '1rem' }}
+                                >
+                                    Change API Key
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WaniKaniSNSLearner />);
+    </script>
+</body>
+</html>
