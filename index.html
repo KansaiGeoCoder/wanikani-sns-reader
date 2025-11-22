@@ -780,33 +780,59 @@
                         const articles = nhkData[0]?.list || [];
                         console.log('Found', articles.length, 'NHK articles');
                         
-                        for (const article of articles.slice(0, 15)) {
+                        // Helper function to validate content quality
+                        const isValidSentence = (text) => {
+                            // Must have Japanese characters
+                            const japaneseChars = (text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length;
+                            if (japaneseChars < 10) return false;
+                            
+                            // Check length
+                            if (text.length < 15 || text.length > 120) return false;
+                            
+                            // Filter out navigation/UI text
+                            if (text.includes('ニュース') && text.length < 20) return false;
+                            if (text.includes('記事') && text.length < 20) return false;
+                            if (text.includes('詳しく') && text.length < 20) return false;
+                            
+                            // Must not be mostly punctuation
+                            const punctuation = (text.match(/[、。！？「」『』（）]/g) || []).length;
+                            if (punctuation > text.length / 3) return false;
+                            
+                            return true;
+                        };
+                        
+                        for (const article of articles.slice(0, 20)) {
                             try {
                                 const articleResponse = await fetch(`https://corsproxy.io/?https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`);
                                 const html = await articleResponse.text();
                                 
                                 const parser = new DOMParser();
                                 const doc = parser.parseFromString(html, 'text/html');
-                                const paragraphs = doc.querySelectorAll('p');
+                                
+                                // Get article body paragraphs (skip navigation and headers)
+                                const articleBody = doc.querySelector('#js-article-body');
+                                if (!articleBody) continue;
+                                
+                                const paragraphs = articleBody.querySelectorAll('p');
                                 
                                 paragraphs.forEach(p => {
                                     const text = p.textContent.trim();
-                                    if (text.length > 15 && text.length < 150) {
-                                        // Split into sentences
-                                        const sentences = text.split(/[。！？]/);
-                                        sentences.forEach(sentence => {
-                                            const cleaned = sentence.trim();
-                                            if (cleaned.length > 15 && cleaned.length < 120) {
-                                                allContent.push({
-                                                    text: cleaned + '。',
-                                                    source: 'NHK News Easy',
-                                                    sourceIcon: '📰',
-                                                    title: article.title,
-                                                    url: `https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`
-                                                });
-                                            }
-                                        });
-                                    }
+                                    
+                                    // Split into sentences
+                                    const sentences = text.split(/[。！？]/);
+                                    sentences.forEach(sentence => {
+                                        const cleaned = sentence.trim();
+                                        
+                                        if (isValidSentence(cleaned)) {
+                                            allContent.push({
+                                                text: cleaned + '。',
+                                                source: 'NHK News Easy',
+                                                sourceIcon: '📰',
+                                                title: article.title,
+                                                url: `https://www3.nhk.or.jp/news/easy/${article.news_id}/${article.news_id}.html`
+                                            });
+                                        }
+                                    });
                                 });
                             } catch (e) {
                                 console.log('Error fetching NHK article:', e);
@@ -821,6 +847,30 @@
                     try {
                         console.log('Fetching Reddit content...');
                         const subreddits = ['newsokur', 'japan_anime', 'newsokuexp', 'BakaNewsJP'];
+                        
+                        // Helper function to check if text is good quality
+                        const isGoodContent = (text) => {
+                            // Must have Japanese characters
+                            if (!/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) return false;
+                            
+                            // Must have reasonable length
+                            if (text.length < 15 || text.length > 120) return false;
+                            
+                            // Filter out markdown links and formatting
+                            if (text.includes('[') || text.includes(']') || text.includes('**')) return false;
+                            if (text.includes('http') || text.includes('www.')) return false;
+                            
+                            // Filter out content that's mostly punctuation
+                            const japaneseChars = (text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length;
+                            if (japaneseChars < 10) return false;
+                            
+                            // Filter out lines that look like headers or wiki content
+                            if (text.startsWith('##') || text.startsWith('###')) return false;
+                            if (text.includes('wiki/') || text.includes('FAQ')) return false;
+                            
+                            return true;
+                        };
+                        
                         for (const subreddit of subreddits) {
                             try {
                                 const redditResponse = await fetch(`https://www.reddit.com/r/${subreddit}.json?limit=50`);
@@ -830,8 +880,11 @@
                                     const title = post.data.title;
                                     const selftext = post.data.selftext;
                                     
-                                    // Check if content contains Japanese characters
-                                    if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(title) && title.length > 15 && title.length < 120) {
+                                    // Only process actual posts, not stickied announcements
+                                    if (post.data.stickied) return;
+                                    
+                                    // Check title
+                                    if (isGoodContent(title)) {
                                         allContent.push({
                                             text: title,
                                             source: `r/${subreddit}`,
@@ -841,11 +894,12 @@
                                         });
                                     }
                                     
-                                    if (selftext && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(selftext)) {
+                                    // Check self text
+                                    if (selftext && selftext.length > 20) {
                                         const sentences = selftext.split(/[。！？\n]/);
                                         sentences.forEach(sentence => {
                                             const cleaned = sentence.trim();
-                                            if (cleaned.length > 15 && cleaned.length < 120) {
+                                            if (isGoodContent(cleaned)) {
                                                 allContent.push({
                                                     text: cleaned + '。',
                                                     source: `r/${subreddit}`,
@@ -873,15 +927,36 @@
                         alert('Unable to fetch Japanese content. This may be due to browser security restrictions (CORS) or the content sources being temporarily unavailable. Please try refreshing.');
                     }
 
+                    // Final validation - filter out any bad content that slipped through
+                    const validatedContent = allContent.filter(item => {
+                        // No markdown or special formatting
+                        if (item.text.includes('[') || item.text.includes(']')) return false;
+                        if (item.text.includes('**') || item.text.includes('##')) return false;
+                        if (item.text.includes('http') || item.text.includes('www.')) return false;
+                        
+                        // Must have reasonable Japanese content
+                        const japaneseChars = (item.text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length;
+                        if (japaneseChars < 8) return false;
+                        
+                        // Not too short or too long
+                        if (item.text.length < 12 || item.text.length > 150) return false;
+                        
+                        return true;
+                    });
+                    
+                    console.log('After validation:', validatedContent.length, 'sentences');
+
                     // Match sentences with vocabulary
                     const filteredVocab = vocabList.filter(v => v.level <= targetLevel);
                     console.log('Matching against', filteredVocab.length, 'vocabulary items');
                     
-                    const matchedPosts = matchSentencesWithVocab(allContent, filteredVocab);
+                    const matchedPosts = matchSentencesWithVocab(validatedContent, filteredVocab);
                     console.log('Found', matchedPosts.length, 'matched sentences');
                     
-                    if (matchedPosts.length === 0 && allContent.length > 0) {
+                    if (matchedPosts.length === 0 && validatedContent.length > 0) {
                         alert('Content was fetched but no sentences matched your vocabulary well. Try a different level or refresh for new content.');
+                    } else if (matchedPosts.length < 5) {
+                        console.log('Warning: Only found', matchedPosts.length, 'good matches. You may want to refresh for more content.');
                     }
                     
                     setPosts(matchedPosts.slice(0, 15)); // Show top 15 matches
